@@ -2,7 +2,7 @@ import sqlite3
 import telebot
 from telebot import types
 
-# التوكن الجديد
+# التوكن
 TOKEN = "8659968699:AAHA0Wmsjp6Cf-qtlV8P4D57-Fm0iHX2VbM"
 bot = telebot.TeleBot(TOKEN)
 
@@ -46,10 +46,9 @@ def start_message(message):
     user = cursor.fetchone()
     
     if not user:
-        # منح 1000 نقطة هدية للمستخدم الجديد
         cursor.execute("INSERT INTO users (user_id, points) VALUES (?, 1000)", (user_id,))
         conn.commit()
-        msg = f"أهلاً بك {message.from_user.first_name}! 🚀\nتم أضافة 1000 نقطة هدية للبدء.\nاختر من القائمة للبدء:"
+        msg = f"أهلاً بك {message.from_user.first_name}! 🚀\nتم إضافة 1000 نقطة هدية للبدء.\nاختر من القائمة للبدء:"
     else:
         msg = f"مرحباً بك مجدداً {message.from_user.first_name}! 👋\nاختر من القائمة بالأسفل:"
         
@@ -93,6 +92,7 @@ def add_channel_start(message):
     conn.close()
     
     points = row[0] if row else 0
+    # الشرط المعدل: يسمح بمرور أي شخص يمتلك نقطة واحدة على الأقل
     if points < 1:
         bot.reply_to(message, "❌ ليس لديك نقاط كافية لإضافة قناة! اشترك في قنوات أخرى لجمع النقاط.")
         return
@@ -101,7 +101,6 @@ def add_channel_start(message):
     bot.register_next_step_handler(msg, process_channel_username)
 
 def process_channel_username(message):
-    # إذا ضغط المستخدم على أي زر رئيسي بدلاً من كتابة اليوزر
     if message.text in ["🔗 تبادل اشتراك", "💰 رصيد النقاط", "➕ إضافة قناتي", "ℹ️ المساعدة"]:
         return
         
@@ -147,7 +146,7 @@ def exchange_subs(message):
 
     bot.send_message(message.chat.id, f"اشترك في القناة التالية للحصول على نقطة:\n👉 {ch_username}", reply_markup=markup)
 
-# التحقق من الاشتراك عبر الزر الشفاف
+# التحقق من الاشتراك
 @bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
 def callback_check_sub(call):
     _, ch_id, ch_username, ch_owner = call.data.split("_")
@@ -159,10 +158,7 @@ def callback_check_sub(call):
         if member.status in ['member', 'administrator', 'creator']:
             conn = sqlite3.connect("bot_database.db")
             cursor = conn.cursor()
-            
-            # إعطاء نقطة للمشترك
             cursor.execute("UPDATE users SET points = points + 1 WHERE user_id = ?", (user_id,))
-            # خصم نقطة من صاحب القناة
             cursor.execute("UPDATE users SET points = points - 1 WHERE user_id = ?", (ch_owner,))
             conn.commit()
             conn.close()
@@ -174,18 +170,21 @@ def callback_check_sub(call):
     except Exception as e:
         bot.answer_callback_query(call.id, "⚠️ تأكد من رفع البوت مشرفاً في القناة أولاً!", show_alert=True)
 
-# أمر سري للأدمن لشحن النقاط لنفسه (/addpoints 500)
+# أمر سري للأدمن لشحن النقاط (/addpoints 500)
 @bot.message_handler(commands=['addpoints'])
 def add_points_admin(message):
     try:
         amount = int(message.text.split()[1])
         conn = sqlite3.connect("bot_database.db")
         cursor = conn.cursor()
+        
+        # التأكد من وجود المستخدم في قاعدة البيانات أولاً قبل تحديث النقاط
+        cursor.execute("INSERT OR IGNORE INTO users (user_id, points) VALUES (?, 0)", (message.from_user.id,))
         cursor.execute("UPDATE users SET points = points + ? WHERE user_id = ?", (amount, message.from_user.id))
         conn.commit()
         conn.close()
         bot.reply_to(message, f"🎉 تمت إضافة {amount} نقطة لحسابك بنجاح!")
-    except:
+    except Exception as e:
         bot.reply_to(message, "اكتب الأمر هكذا: /addpoints 500")
 
 # تشغيل البوت
