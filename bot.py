@@ -49,7 +49,7 @@ def start_message(message):
         # منح 1000 نقطة هدية للمستخدم الجديد
         cursor.execute("INSERT INTO users (user_id, points) VALUES (?, 1000)", (user_id,))
         conn.commit()
-        msg = f"أهلاً بك {message.from_user.first_name}! 🚀\nتم منجك 1000 نقطة هدية للبدء.\nاختر من القائمة للبدء:"
+        msg = f"أهلاً بك {message.from_user.first_name}! 🚀\nتم أضافة 1000 نقطة هدية للبدء.\nاختر من القائمة للبدء:"
     else:
         msg = f"مرحباً بك مجدداً {message.from_user.first_name}! 👋\nاختر من القائمة بالأسفل:"
         
