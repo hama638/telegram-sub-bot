@@ -2,160 +2,191 @@ import sqlite3
 import telebot
 from telebot import types
 
+# التوكن الجديد
 TOKEN = "8659968699:AAHA0Wmsjp6Cf-qtlV8P4D57-Fm0iHX2VbM"
 bot = telebot.TeleBot(TOKEN)
 
+# تهيئة قاعدة البيانات
 def init_db():
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (
                         user_id INTEGER PRIMARY KEY,
-                        points INTEGER DEFAULT 10
+                        points INTEGER DEFAULT 1000
                     )''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS channels (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         owner_id INTEGER,
-                        channel_username TEXT
+                        channel_username TEXT UNIQUE
                     )''')
     conn.commit()
     conn.close()
 
 init_db()
 
-def get_user_points(user_id):
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
-    res = cursor.fetchone()
-    conn.close()
-    return res[0] if res else 0
-
-def update_points(user_id, amount):
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET points = points + ? WHERE user_id=?", (amount, user_id))
-    conn.commit()
-    conn.close()
-
-def add_user(user_id):
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO users (user_id, points) VALUES (?, 1000)", (user_id,))
-    conn.commit()
-    conn.close()
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    add_user(message.from_user.id)
+# القائمة الرئيسية
+def main_keyboard():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    btn_sub = types.KeyboardButton("🔗 تبادل اشتراك")
-    btn_points = types.KeyboardButton("💰 رصيد النقاط")
-    btn_add = types.KeyboardButton("➕ إضافة قناتي")
-    btn_help = types.KeyboardButton("ℹ️ المساعدة")
-    markup.add(btn_sub, btn_points, btn_add, btn_help)
-    
-    bot.send_message(
-        message.chat.id, 
-        f"أهلاً بك {message.from_user.first_name}! 🚀\nتم منحك 10 نقاط هدية.\nاختر من القائمة للبدء:", 
-        reply_markup=markup
-    )
+    btn1 = types.KeyboardButton("🔗 تبادل اشتراك")
+    btn2 = types.KeyboardButton("💰 رصيد النقاط")
+    btn3 = types.KeyboardButton("➕ إضافة قناتي")
+    btn4 = types.KeyboardButton("ℹ️ المساعدة")
+    markup.add(btn1, btn2, btn3, btn4)
+    return markup
 
-@bot.message_handler(func=lambda message: True)
-def handle_buttons(message):
+# أمر التشغيل /start
+@bot.message_handler(commands=['start'])
+def start_message(message):
+    bot.clear_step_handler(message)
     user_id = message.from_user.id
     
-    if message.text == "💰 رصيد النقاط":
-        pts = get_user_points(user_id)
-        bot.reply_to(message, f"💰 رصيدك الحالي: {pts} نقطة.")
-        
-    elif message.text == "➕ إضافة قناتي":
-        pts = get_user_points(user_id)
-        if pts < 1:
-            bot.reply_to(message, "❌ ليس لديك نقاط كافية لإضافة قناة! اشترك في قنوات أخرى لجمع النقاط.")
-            return
-        msg = bot.reply_to(message, "أرسل يوزر قناتك العامة الآن مع الـ @ (مثال: @my_channel):\n⚠️ تنبيه: يجب رفع البوت مشرفاً في القناة أولاً ليتأكد من الاشتراكات.")
-        bot.register_next_step_handler(msg, process_add_channel)
-        
-    elif message.text == "🔗 تبادل اشتراك":
-        send_next_channel(message)
-        
-    elif message.text == "ℹ️ المساعدة":
-        bot.reply_to(message, "1. أضف البوت مشرفاً في قناتك.\n2. أضف يوزر قناتك للبوت.\n3. اشترك في قنوات الأعضاء لجمع النقاط وترويج قناتك!")
-
-def process_add_channel(message):
-    ch_username = message.text.strip()
-    if ch_username.startswith("@"):
-        conn = sqlite3.connect("bot_database.db")
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO channels (owner_id, channel_username) VALUES (?, ?)", (message.from_user.id, ch_username))
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT points FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
+    
+    if not user:
+        # منح 1000 نقطة هدية للمستخدم الجديد
+        cursor.execute("INSERT INTO users (user_id, points) VALUES (?, 1000)", (user_id,))
         conn.commit()
-        conn.close()
-        bot.reply_to(message, f"✅ تم إضافة القناة {ch_username} بنجاح!\nسيتم خصم نقطة مع كل مشترك جديد يأتيك.")
+        msg = f"أهلاً بك {message.from_user.first_name}! 🚀\nتم منجك 1000 نقطة هدية للبدء.\nاختر من القائمة للبدء:"
     else:
-        bot.reply_to(message, "❌ يوزر غير صحيح! أرسل اليوزر يبدأ بـ @")
+        msg = f"مرحباً بك مجدداً {message.from_user.first_name}! 👋\nاختر من القائمة بالأسفل:"
+        
+    conn.close()
+    bot.send_message(message.chat.id, msg, reply_markup=main_keyboard())
 
-def send_next_channel(message):
+# زر رصيد النقاط
+@bot.message_handler(func=lambda message: message.text == "💰 رصيد النقاط")
+def check_points(message):
+    bot.clear_step_handler(message)
     user_id = message.from_user.id
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, owner_id, channel_username FROM channels WHERE owner_id != ? LIMIT 1", (user_id,))
-    ch = cursor.fetchone()
+    cursor.execute("SELECT points FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
     conn.close()
     
-    if ch:
-        ch_id, owner_id, ch_username = ch
-        owner_pts = get_user_points(owner_id)
-        
-        if owner_pts < 1:
-            send_next_channel(message)
-            return
+    points = row[0] if row else 0
+    bot.reply_to(message, f"💰 رصيدك الحالي: {points} نقطة.")
 
-        markup = types.InlineKeyboardMarkup()
-        btn_link = types.InlineKeyboardButton("🔗 الانتقال للقناة", url=f"https://t.me/{ch_username[1:]}")
-        btn_verify = types.InlineKeyboardButton("✅ تحقق من الاشتراك", callback_data=f"check_{ch_username}_{owner_id}")
-        markup.add(btn_link)
-        markup.add(btn_verify)
-        
-        bot.send_message(message.chat.id, f"اشترك في القناة التالية للحصول على +1 نقطة:\n👉 {ch_username}", reply_markup=markup)
-    else:
-        bot.send_message(message.chat.id, "لا توجد قنوات متاحة للتبادل حالياً! جرب لاحقاً.")
+# زر المساعدة
+@bot.message_handler(func=lambda message: message.text == "ℹ️ المساعدة")
+def help_message(message):
+    bot.clear_step_handler(message)
+    text = ("ℹ️ **كيفية استخدام البوت:**\n\n"
+            "1. أضف البوت مشرفاً في قناتك.\n"
+            "2. اضغط على **➕ إضافة قناتي** وادخل يوزر القناة (مثال: @my_channel).\n"
+            "3. اشترك في قنوات الأعضاء من زر **🔗 تبادل اشتراك** لجمع النقاط وتطوير قناتك!")
+    bot.reply_to(message, text, parse_mode="Markdown")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
-def verify_subscription(call):
-    _, ch_username, owner_id = call.data.split("_")
-    user_id = call.from_user.id
+# زر إضافة قناتي
+@bot.message_handler(func=lambda message: message.text == "➕ إضافة قناتي")
+def add_channel_start(message):
+    bot.clear_step_handler(message)
+    user_id = message.from_user.id
     
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT points FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    points = row[0] if row else 0
+    if points < 1:
+        bot.reply_to(message, "❌ ليس لديك نقاط كافية لإضافة قناة! اشترك في قنوات أخرى لجمع النقاط.")
+        return
+
+    msg = bot.reply_to(message, "أرسل يوزر قناتك العامة الآن مع الـ @ (مثال: @my_channel):\n\n⚠️ تنبيه: يجب رفع البوت مشرفاً في القناة أولاً ليتمكن من التأكد من الاشتراكات.")
+    bot.register_next_step_handler(msg, process_channel_username)
+
+def process_channel_username(message):
+    # إذا ضغط المستخدم على أي زر رئيسي بدلاً من كتابة اليوزر
+    if message.text in ["🔗 تبادل اشتراك", "💰 رصيد النقاط", "➕ إضافة قناتي", "ℹ️ المساعدة"]:
+        return
+        
+    username = message.text.strip()
+    if not username.startswith("@"):
+        bot.reply_to(message, "❌ يوزر غير صحيح! أرسل اليوزر يبدأ بـ @")
+        return
+
+    user_id = message.from_user.id
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO channels (owner_id, channel_username) VALUES (?, ?)", (user_id, username))
+        conn.commit()
+        bot.reply_to(message, f"✅ تم إضافة القناة {username} بنجاح!\nسيتم خصم نقطة مع كل مشترك جديد يأتيك.")
+    except sqlite3.IntegrityError:
+        bot.reply_to(message, "⚠️ هذه القناة مضافة بالفعل في النظام!")
+    finally:
+        conn.close()
+
+# زر تبادل اشتراك
+@bot.message_handler(func=lambda message: message.text == "🔗 تبادل اشتراك")
+def exchange_subs(message):
+    bot.clear_step_handler(message)
+    user_id = message.from_user.id
+    
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, channel_username, owner_id FROM channels WHERE owner_id != ? LIMIT 1", (user_id,))
+    channel = cursor.fetchone()
+    conn.close()
+
+    if not channel:
+        bot.reply_to(message, "لا توجد قنوات متاحة للتبادل حالياً! جرب لاحقاً.")
+        return
+
+    ch_id, ch_username, ch_owner = channel
+    markup = types.InlineKeyboardMarkup()
+    btn_link = types.InlineKeyboardButton("📢 دخول القناة", url=f"https://t.me/{ch_username.replace('@', '')}")
+    btn_check = types.InlineKeyboardButton("✅ تحقق من الاشتراك", callback_data=f"check_{ch_id}_{ch_username}_{ch_owner}")
+    markup.add(btn_link)
+    markup.add(btn_check)
+
+    bot.send_message(message.chat.id, f"اشترك في القناة التالية للحصول على نقطة:\n👉 {ch_username}", reply_markup=markup)
+
+# التحقق من الاشتراك عبر الزر الشفاف
+@bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
+def callback_check_sub(call):
+    _, ch_id, ch_username, ch_owner = call.data.split("_")
+    user_id = call.from_user.id
+    ch_owner = int(ch_owner)
+
     try:
         member = bot.get_chat_member(ch_username, user_id)
         if member.status in ['member', 'administrator', 'creator']:
-            update_points(user_id, 1)
-            update_points(int(owner_id), -1)
-            bot.answer_callback_query(call.id, "✅ تم التحقق بنجاح! حصلت على +1 نقطة.", show_alert=True)
-            bot.delete_message(call.message.chat.id, call.message.message_id)
-            send_next_channel(call.message)
+            conn = sqlite3.connect("bot_database.db")
+            cursor = conn.cursor()
+            
+            # إعطاء نقطة للمشترك
+            cursor.execute("UPDATE users SET points = points + 1 WHERE user_id = ?", (user_id,))
+            # خصم نقطة من صاحب القناة
+            cursor.execute("UPDATE users SET points = points - 1 WHERE user_id = ?", (ch_owner,))
+            conn.commit()
+            conn.close()
+
+            bot.answer_callback_query(call.id, "✅ تم التحقق! تم منحك 1 نقطة.")
+            bot.edit_message_text("✅ تم الاشتراك وحصلت على 1 نقطة!", chat_id=call.message.chat.id, message_id=call.message.message_id)
         else:
             bot.answer_callback_query(call.id, "❌ لم تشترك في القناة بعد!", show_alert=True)
     except Exception as e:
-        bot.answer_callback_query(call.id, "⚠️ تأكد أن البوت مرفوع مشرفاً في تلك القناة للتحقق!", show_alert=True)
+        bot.answer_callback_query(call.id, "⚠️ تأكد من رفع البوت مشرفاً في القناة أولاً!", show_alert=True)
 
-print("Bot is running online 24/7...")
-bot.infinity_polling()
-
-# أمر سري للأدمن لإضافة نقاط لنفسه
-# الاستخدام في تليجرام: addpoints 500/
+# أمر سري للأدمن لشحن النقاط لنفسه (/addpoints 500)
 @bot.message_handler(commands=['addpoints'])
 def add_points_admin(message):
-    # ضع آيدي تليجرام الخاص بك هنا ليصبح الأمر لك وحدك
-    ADMIN_ID = message.from_user.id  
+    try:
+        amount = int(message.text.split()[1])
+        conn = sqlite3.connect("bot_database.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET points = points + ? WHERE user_id = ?", (amount, message.from_user.id))
+        conn.commit()
+        conn.close()
+        bot.reply_to(message, f"🎉 تمت إضافة {amount} نقطة لحسابك بنجاح!")
+    except:
+        bot.reply_to(message, "اكتب الأمر هكذا: /addpoints 500")
 
-    if message.from_user.id == ADMIN_ID:
-        try:
-            amount = int(message.text.split()[1])
-            conn = sqlite3.connect("bot_database.db")
-            cursor = conn.cursor()
-            cursor.execute("UPDATE users SET points = points + ? WHERE user_id = ?", (amount, message.from_user.id))
-            conn.commit()
-            conn.close()
-            bot.reply_to(message, f"تمت إضافة {amount} نقطة لحسابك بنجاح! 🎉")
-        except:
-            bot.reply_to(message, "اكتب الأمر هكذا: /addpoints 500")
+# تشغيل البوت
+bot.infinity_polling()
