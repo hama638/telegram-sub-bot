@@ -40,7 +40,7 @@ def update_points(user_id, amount):
 def add_user(user_id):
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO users (user_id, points) VALUES (?, 10)", (user_id,))
+    cursor.execute("INSERT OR IGNORE INTO users (user_id, points) VALUES (?, 1000)", (user_id,))
     conn.commit()
     conn.close()
 
@@ -140,3 +140,22 @@ def verify_subscription(call):
 
 print("Bot is running online 24/7...")
 bot.infinity_polling()
+
+# أمر سري للأدمن لإضافة نقاط لنفسه
+# الاستخدام في تليجرام: addpoints 500/
+@bot.message_handler(commands=['addpoints'])
+def add_points_admin(message):
+    # ضع آيدي تليجرام الخاص بك هنا ليصبح الأمر لك وحدك
+    ADMIN_ID = message.from_user.id  
+
+    if message.from_user.id == ADMIN_ID:
+        try:
+            amount = int(message.text.split()[1])
+            conn = sqlite3.connect("bot_database.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET points = points + ? WHERE user_id = ?", (amount, message.from_user.id))
+            conn.commit()
+            conn.close()
+            bot.reply_to(message, f"تمت إضافة {amount} نقطة لحسابك بنجاح! 🎉")
+        except:
+            bot.reply_to(message, "اكتب الأمر هكذا: /addpoints 500")
